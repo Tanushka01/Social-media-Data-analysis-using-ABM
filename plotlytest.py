@@ -19,7 +19,7 @@ def create_node_trace():
 
     node_trace = go.Scatter(x=node_x, y=node_y, mode='markers', hoverinfo='text',
                             marker=dict(showscale=True, colorscale='curl', cmin=-1, cmax=1,
-                                        reversescale=False, color=[], size=10,
+                                        reversescale=False, color=[], size=12,
                                         colorbar=dict(thickness=15, title='Opinion', xanchor='left', titleside='right'),
                                         line_width=2))
 
@@ -41,6 +41,7 @@ def create_edge_trace():
     edge_x = []
     edge_y = []
 
+    colors = ['red', 'green', 'magenta']
     for edge in G.edges():
         x0, y0 = G.nodes[edge[0]]['pos']
         x1, y1 = G.nodes[edge[1]]['pos']
@@ -51,8 +52,55 @@ def create_edge_trace():
         edge_y.append(y1)
         edge_y.append(None)
 
+        # if G.nodes[edge[0]]['opinion']*G.nodes[edge[1]]['opinion'] > 0:
+        #     if G.nodes[edge[0]]['opinion'] > 0:
+        #         colour.append('blue')
+        #     elif G.nodes[edge[0]]['opinion'] < 0:
+        #         colour.append('red')
+        #     else:
+        #         colour.append('#888')
+
+
+
+
     edge_trace = go.Scatter(x=edge_x, y=edge_y, line=dict(width=1.3, color='#888'), hoverinfo='none', mode='lines')
     return edge_trace
+#
+# def create_edge_trace():
+#     edge_x = []
+#     edge_y = []
+#     colour = []
+#
+#     # Iterate over the edges in the graph
+#     for edge in G.edges():
+#         # Get the positions of the nodes at either end of the edge
+#         x0, y0 = G.nodes[edge[0]]['pos']
+#         x1, y1 = G.nodes[edge[1]]['pos']
+#
+#         # Add the edge coordinates to the lists
+#         edge_x.extend([x0, x1, None])
+#         edge_y.extend([y0, y1, None])
+#
+#         # Determine the color of the edge based on the node opinions
+#         if G.nodes[edge[0]]['opinion'] * G.nodes[edge[1]]['opinion'] > 0:
+#             colour.append('blue')
+#         elif G.nodes[edge[0]]['opinion'] * G.nodes[edge[1]]['opinion'] < 0:
+#             colour.append('red')
+#         else:
+#             colour.append('#888')
+#
+#     # Create the Scatter object and set its properties
+#     edge_trace = go.Scatter(
+#         x=edge_x,
+#         y=edge_y,
+#         mode='lines',
+#         line=dict(width=1.3, color=colour),
+#         hoverinfo='none',
+#         name='Edge Trace'
+#     )
+#
+#     # Return the Scatter object
+#     return edge_trace
 
 
 def py_ploy_make_plot(num_steps):
@@ -65,7 +113,7 @@ def py_ploy_make_plot(num_steps):
     node_trace = create_node_trace()
     edge_trace = create_edge_trace()
 
-    fig2 = go.Figure(data=[node_trace],
+    fig2 = go.Figure(data=[edge_trace, node_trace],
                      layout=go.Layout(titlefont_size=16, showlegend=False, hovermode='closest',
                                       margin=dict(b=20, l=5, r=5, t=40),
                                       annotations=[dict(showarrow=False, xref="paper",
@@ -99,7 +147,10 @@ def py_ploy_make_plot(num_steps):
     for step in range(num_steps):
         node_trace = create_node_trace()
 
-        frame = go.Frame(data=[node_trace], name="step" + str(step))
+        if step%3 == 0:
+            edge_trace = create_edge_trace()
+
+        frame = go.Frame(data=[edge_trace, node_trace], name="step" + str(step))
 
         frames.append(frame)
         slider_step = {"args": [
@@ -148,6 +199,5 @@ def py_ploy_make_plot(num_steps):
     fig2.show()
 
 
-py_ploy_make_plot(20)
-print(general_pub_op)
-
+py_ploy_make_plot(31)
+# print(general_pub_op)
