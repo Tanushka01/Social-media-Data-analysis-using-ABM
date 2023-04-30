@@ -25,7 +25,7 @@ WHAT I'M TRYING TO ACCOMPLISH:
 
 - How does the presence of echo chambers affect the degree of polarization in a society?
     what factors will have people with opposing opinions endorse each other online?
-    
+
 - Higher the wright the more influence it has on the opinion of user reading.
 
 - does overall public opinion have an influence on smaller twitter communities, one with no influence, 
@@ -40,7 +40,7 @@ WHAT I'M TRYING TO ACCOMPLISH:
 - Comparison between influential information and public opinion. which is stronger. most nodes swayed? is influence stronger than general public opinion
 
 - closer to an edge, lower the sway. lmao sure
-    
+
 """
 
 
@@ -56,10 +56,24 @@ class User(mesa.Agent):
         self.opinion = opinion
 
         # more polarized they are the less they are going to be influenced by their surroundings
-        if (-1 <= opinion < -0.8) or (0.8 <= opinion <= 1):
-            self.sway_power = 0.1
+        if abs(opinion) == 1:
+            self.sway_power = 0.2
+            self.budge_value = 99.8
+
+        elif 0.8 <= abs(opinion) < 1:
+            self.sway_power = 1
+            self.budge_value = 99
+
+        elif 0.5 <= abs(opinion) < 0.8:
+            self.sway_power = 15
+            self.budge_value = 75
+
         else:
-            self.sway_power = 0.8
+            self.sway_power = 45
+            self.budge_value = 55
+
+        self.sway = 50
+        self.budge_value = 50
 
         self.influence = influence
         self.tweeting_rate = tweeting_rate
@@ -72,34 +86,58 @@ class User(mesa.Agent):
         # to track tweets that you have interacted with, so it doesn't reappear
         self.interaction_history = []
 
+    def calculate_sway(self):
+        if 0.95 <= abs(self.opinion) <= 1:
+            self.sway_power = 5
+            self.budge_value = 95
+
+        elif 0.8 <= abs(self.opinion) < 0.95:
+            self.sway_power = 10
+            self.budge_value = 90
+
+        elif 0.3 <= abs(self.opinion) < 0.8:
+            self.sway_power = 20
+            self.budge_value = 80
+
+        else:
+            self.sway_power = 45
+            self.budge_value = 55
+
+    def retweet(self, tweet):
+        for neighbour in self.neighbours:
+
+            if (self.model.schedule.agents[neighbour].unique_id != tweet[1]) and (
+                    len(self.model.schedule.agents[neighbour].screen) < 10):
+
+                if tweet[1] not in self.model.schedule.agents[neighbour].neighbours:
+                    # print("retweet made to", self.model.schedule.agents[neighbour].unique_id)
+                    self.model.schedule.agents[neighbour].screen.append(tweet)
 
     # get list of neighbouring users - if user endorses someone with a different opinion then a connection forms.
     def my_neighbours(self):
-        self.neighbours = model.get_friends(self.unique_id - 1)
+        self.neighbours = model.get_friends(self.unique_id)
 
+    def endorse_test(self, id, author):
+        self.model.schedule.agents[author].tweets[id][1] += 1
 
-    def endorse_test(self):
-        for tweet in self.screen:
-            to_like = tweet[1]
-            position = tweet[0]
+    def check_for_worst_opinion(self, tweet_opinions):
+        worst_opinion = self.opinion
 
-            print("before endorsement", self.model.schedule.agents[to_like].tweets[position])
-            self.model.schedule.agents[to_like].tweets[position][1] += 1
-            print("after endorsement", self.model.schedule.agents[to_like].tweets[position])
+        if self.opinion < 0:
+            worst_opinion = max(tweet_opinions)
+        elif self.opinion > 0:
+            worst_opinion = min(tweet_opinions)
 
-            print("my screen: ", self.screen)
+        if (abs(worst_opinion - self.opinion) > 0.2) and (worst_opinion * self.opinion < 0):
+            return tweet_opinions.index(worst_opinion)
 
-            # remove endorsed tweet so it cannot be liked twice
-            self.screen.remove(tweet)
-            print("my screen: ", self.screen)
-
+        else:
+            return False
 
     # reads screen and updates opinion based on screen average
     def read_screen(self):
         tweet_opinions = []
-
-        # if self.screen:
-        #     print("me: ", self.unique_id - 1, self.screen)
+        input_opinions = []
 
         for tweet in self.screen:
             tweet_id = tweet[0]
@@ -108,28 +146,86 @@ class User(mesa.Agent):
             author_influence = tweet[3]
             tweet_weight = self.model.schedule.agents[tweet_author].tweets[tweet_id][1]
 
+            opinion_difference = tweet_opinion - self.opinion
+
+            # depending on weight, adds to tweet_opinions list.
             for i in range(tweet_weight):
                 tweet_opinions.append(tweet_opinion)
 
+            input_opinions.append(tweet_opinion)
 
-            # calculate screen opinion mean
+            if abs(opinion_difference) < 0.005:
+                model.G.add_edge(self.unique_id, tweet_author)
+                self.my_neighbours()
+                self.model.schedule.agents[tweet_author].my_neighbours()
+
+            # make friends
+            # if tweet_author not in self.neighbours:
+            #     if abs(self.opinion) <= abs(tweet_opinion) and random.random() < 0.1:
+            #         model.G.add_edge(self.unique_id, tweet_author)
+            #         self.my_neighbours()
+            #         self.model.schedule.agents[tweet_author].my_neighbours()
+
+            # elif (-1 <= self.opinion <= 0.0) and (-1 <= tweet_opinion < -0.5):
+            #     model.G.add_edge(self.unique_id, tweet_author)
+            #     self.my_neighbours()
+            #     self.model.schedule.agents[tweet_author].my_neighbours()
+            #
+            # elif (0.0 <= self.opinion <= 1) and (0.5 < tweet_opinion <= 1):
+            #     model.G.add_edge(self.unique_id, tweet_author)
+            #     self.my_neighbours()
+            #     self.model.schedule.agents[tweet_author].my_neighbours()
+            #
+            # elif abs(opinion_difference) < 0.005:
+            #     model.G.add_edge(self.unique_id, tweet_author)
+            #     self.my_neighbours()
+            #     self.model.schedule.agents[tweet_author].my_neighbours()
+
+            if abs(tweet_opinion - self.opinion) < 0.5:
+                self.endorse_test(tweet_id, tweet_author)
+                self.retweet(tweet)
+
+        # calculate screen opinion mean
         if tweet_opinions:
             average_screen_opinion = round(mean(tweet_opinions), 2)
-            self.opinion = round(mean([self.opinion, average_screen_opinion]), 2)
-            model.set_opinion(self.opinion, self.unique_id - 1)
+
+            """
+            incorporate the sway factor? likeliness to stray
+
+            """
+
+            if (abs(average_screen_opinion) > abs(self.opinion)) and (abs(average_screen_opinion - self.opinion) < 0.5):
+                self.opinion = round(mean([self.opinion, average_screen_opinion]), 2)
+                model.set_opinion(self.opinion, self.unique_id)
+
+            else:
+                self.opinion = round((self.opinion * self.budge_value + average_screen_opinion * self.sway_power) / 100,
+                                     2)
+                model.set_opinion(self.opinion, self.unique_id)
+
+            worst_input = self.check_for_worst_opinion(input_opinions)
+            # print("worst input pos: ", worst_input)
+
+            if type(worst_input) == int:
+
+                ex_friend = self.screen[worst_input]
+
+                if model.G.has_edge(self.unique_id, ex_friend[1]):
+                    model.G.remove_edge(self.unique_id, ex_friend[1])
+                    self.my_neighbours()
+                    self.model.schedule.agents[ex_friend[1]].my_neighbours()
 
         self.screen.clear()
-
 
     # function that lets users make a tweet
     def create_tweet(self):
 
         # weight of tweet - determines amount of influence when adjusting overall opinions.
-        weight = round(random.uniform(1, 5))
+        weight = 1
 
         tweet_opinion = self.opinion
         # tweet sent to other users - they point back to the author to have one place where weight is updated
-        tweet = [self.tweet_id, self.unique_id - 1, tweet_opinion, self.influence]
+        tweet = [self.tweet_id, self.unique_id, tweet_opinion, self.influence]
 
         for_self = [self.tweet_id, weight]
 
@@ -147,19 +243,12 @@ class User(mesa.Agent):
 
     # user tweet reaches opinion threshold - leading to echo chambers?
     def drop_neighbour(self):
-        pass
-
-
-    def react(self):
-        """
-        ways a user can react to a tweet:
-        agree:
-        endorse by liking or retweeting
-        disagree:
-        reply - too complex?
-
-        """
-        pass
+        if len(self.neighbours) > 1:
+            for neighbour in self.neighbours:
+                if abs(self.opinion) > 0.7 and (self.model.schedule.agents[neighbour].opinion * self.opinion < 0):
+                    model.G.remove_edge(self.unique_id, self.model.schedule.agents[neighbour].unique_id)
+                    self.my_neighbours()
+                    self.model.schedule.agents[neighbour].my_neighbours()
 
     # tester function for model behaviour behaviour
     def pick_agent(self):
@@ -172,7 +261,6 @@ class User(mesa.Agent):
         else:
             return "no neighbours"
 
-
     def step(self) -> None:
         """
         At each time step users can do one of the following:
@@ -183,24 +271,18 @@ class User(mesa.Agent):
         always use unique_id - 1 when using model functions
         """
 
-        # if model.get_step_count() == 1:
-        #     print("I'm active: ", self.unique_id-1, " opinion: ", self.opinion)
-        # print('active: ', self.unique_id - 1, ' opinion: ', self.opinion, model.get_opinion(self.unique_id -1))
-
         # get a list of your neighbours
         self.my_neighbours()
 
-        # create a tweet and send it to your friends
+        # create a tweet and send it to your friends --- add this as a maybe. not everyone creates a tweet.
         self.send_tweet_to_friends(self.create_tweet())
 
-        #
+        # self.calculate_sway()
+        # updates the opinion
         self.read_screen()
 
-
-        # self.opinion = self.read_screen()
-        # model.set_opinion(self.opinion, self.unique_id - 1)
-
-
+        print("done with step")
+        print("")
 
 
 class Network(mesa.Model):
@@ -223,8 +305,9 @@ class Network(mesa.Model):
         # create the user agents based on input graph and add them to the model
         for i, node in enumerate(self.G.nodes()):
             op = self.G.nodes[i]['opinion']
+            unique_id = self.G.nodes[i]['id']
 
-            a = User(i + 1, self, op, (round(random.uniform(1, 100))) / 100, influence=0)
+            a = User(i, self, op, (round(random.uniform(1, 100))) / 100, influence=0)
             # a = User(i, self, op, (round(random.uniform(1, 100))) / 100, influence=0)
 
             self.schedule.add(a)
@@ -245,7 +328,6 @@ class Network(mesa.Model):
         friends = [n for n in self.G.neighbors(node)]
         return friends
 
-
     def calculate_population_opinion(self):
         public_opinion = []
         plus = 0
@@ -258,9 +340,7 @@ class Network(mesa.Model):
             elif 0 < self.G.nodes[i]['opinion']:
                 plus += 1
 
-
-        return round(mean(public_opinion),3), plus, minus
-
+        return round(mean(public_opinion), 3), plus, minus
 
     def step(self):
         """Advance the model by one step."""
@@ -282,22 +362,23 @@ def create_graph(n):
 
     # Define the probability of connecting nodes with similar opinions
     # As the number of users increase, this decreases.
-    p = 0.3
+    p = 0.2
 
+    # for a in range(n):
+    #     if a < 10:
+    #         # opinion = round(random.uniform(-1.00, -0.10), 2)
+    #         opinion = -0.5
+    #         construction_graph.add_node(a, opinion=opinion)
+    #     elif a < 40:
+    #         opinion = round(random.uniform(0.00, 1.00), 2)
+    #         construction_graph.add_node(a, opinion=opinion)
+    #     else:
+    #         opinion = 1.00
+    #         construction_graph.add_node(a, opinion=opinion)
 
     for a in range(n):
-        if a < 10:
-            # opinion = round(random.uniform(-1.00, -0.10), 2)
-            opinion = -0.5
-            construction_graph.add_node(a, opinion=opinion)
-        elif a < 40:
-            opinion = round(random.uniform(0.00, 1.00), 2)
-            construction_graph.add_node(a, opinion=opinion)
-        else:
-            opinion = 1.00
-            construction_graph.add_node(a, opinion=opinion)
-
-
+        opinion = round(random.uniform(-1.00, 1.00), 2)
+        construction_graph.add_node(a, id=a, opinion=opinion)
 
     """
     make connection function for connection to different 
@@ -309,7 +390,7 @@ def create_graph(n):
             n2 = construction_graph.nodes[b]['opinion']
             difference = round(n1 - n2, 2)
 
-            if (n1 <= 0 and n2 <= 0) or (n1 >= 0 and n2 >= 0):
+            if n1 * n2 >= 0:
                 # print('same side', n1, n2)
 
                 if random.random() < p:
@@ -317,37 +398,46 @@ def create_graph(n):
                     construction_graph.add_edge(a, b)
 
 
-            elif abs(difference) < 0.5:
+            elif abs(difference) < 0.2:
                 # print('different sides:', n1, n2)
                 connect_question = round(random.random(), 2)
                 # print(l)
-                if connect_question < 0.2:
+                if connect_question < 0.1:
                     # print('edge created')
                     construction_graph.add_edge(a, b)
-            else:
-                if random.random() < 0.01:
-                    construction_graph.add_edge(a, b)
-
+            # else:
+            #     if random.random() < 0.001:
+            #         construction_graph.add_edge(a, b)
 
     # remove isolates from graph
     if list(nx.isolates(construction_graph)) != 0:
         for isolated_node in list(nx.isolates(construction_graph)):
             for j in range(isolated_node + 1, num_nodes):
-                if (construction_graph.nodes[isolated_node]['opinion'] - construction_graph.nodes[j]['opinion'] < 0.5) or construction_graph.nodes[j]['opinion'] == 0:
+                if (construction_graph.nodes[isolated_node]['opinion'] - construction_graph.nodes[j][
+                    'opinion'] < 0.5) or construction_graph.nodes[j]['opinion'] == 0:
                     if random.random() < 0.2:
                         construction_graph.add_edge(isolated_node, j)
 
     return construction_graph
 
 
-num_nodes = 50
+num_nodes = 100
+
 G = create_graph(num_nodes)
 print(G)
+
 # init model
 model = Network(num_nodes, G)
 # model.step()
-# print("")
-# print("")
-# print("")
-# model.step()
+# print(" ")
+# print(" ")
+# print(" ")
+# print(" ")
 #
+# model.step()
+
+# print(" ")
+# model.step()
+
+print(G)
+
